@@ -227,7 +227,7 @@ function render() {
       uniforms.coef5.value = (smoothed[4]>=0) ? smoothed[4]/20: -smoothed[4]/20;
       uniforms.coef6.value = 0.7;//Math.min(0.9,Math.max(0.7,1-smoothed[5]/20));
 
-      uniforms.coef9.value = smoothed[8]/20;
+      uniforms.coef9.value = smoothed[9]/20;
 
       uniforms.rms.value = smooth_rms_val;
 
