@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>in-grid.Real.Bodies</title>
+    <script src="js/dependencies/three.min.js"></script> 
+    <script src="js/dependencies/meyda/meyda.min.js"></script>
+
+    <link rel="stylesheet" href="css/interactivestyle.css">
+
+    <script id="vertexShader" type="x-shader/x-vertex">
+
+        void main() {
+            gl_Position = vec4( position, 1.0 );
+        }
+        
+    </script>
+
+    <script id="fragmentShader" type="x-shader/x-fragment">
+    
+        precision highp float;
+        uniform vec2 u_resolution;
+        uniform float u_time;
+        uniform vec2 u_mouse;
+
+        uniform vec3 col1;
+        uniform vec3 col2;
+        uniform vec3 col3;
+        uniform vec3 col4;
+
+        uniform float rms;
+        uniform float alpha;
+
+        uniform float coef1;
+        uniform float coef2;
+        uniform float coef3;
+        uniform float coef4;
+        uniform float coef5;
+        uniform float coef6;
+        uniform float coef9;
+        
+        
+        float rand(vec2 n) { 
+            return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
+        }
+
+        float noise(vec2 p){
+            vec2 ip = floor(p);
+            vec2 u = fract(p);
+            u = u*u*(3.0-2.0*u);
+
+            float res = mix(
+                mix(rand(ip),rand(ip+vec2(1.0,0.0)),u.x),
+                mix(rand(ip+vec2(0.0,1.0)),rand(ip+vec2(1.0,1.0)),u.x),u.y);
+            return res*res;
+        }
+
+        const mat2 mtx = mat2( 0.80,  0.60, -0.60,  0.80 );
+
+        float fbmFluid( vec2 p )
+        {
+            float f = 0.0;
+
+            f += 0.500000*noise( p ); p = mtx*p*2.02;
+            f += 0.031250*noise( p ); p = mtx*p*2.01;
+            f += 0.250000*noise( p ); p = mtx*p*2.03;
+            f += 0.125000*noise( p ); p = mtx*p*2.01;
+            f += 0.062500*noise( p ); p = mtx*p*2.04;
+            f += 0.015625*noise( p );
+
+            return f/coef6;
+        }
+
+
+        float pattern( in vec2 p )
+        {
+            return fbmFluid( p + fbmFluid( p + fbmFluid( p ) ) );
+        }
+        
+        
+        
+        //BLOOD CELLS
+        
+    
+        const float BEAT = 4.0;
+
+        // https://iquilezles.org/articles/smin
+        float smin( float a, float b, float k )
+        {
+            float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+            return mix( b, a, h ) - k*h*(1.0-h);
+        }
+
+        float cells(vec2 uv){  // Trimmed down.
+            uv = mix(sin(uv + vec2(1.57, 0)), sin(uv.yx*1.4 + vec2(1.57, 0)), .75);
+            return uv.x*uv.y*.3 + .7;
+        }
+
+        
+        float fbm(vec2 uv)
+        {
+
+            float f = 200.0;
+            vec2 r = (vec2(.9, .45));    
+            vec2 tmp;
+            float T = 100.0 + u_time * 1.3;
+            T += sin(u_time * BEAT) * .1;
+            // layers of cells with some scaling and rotation applied.
+            for (int i = 1; i < 8; ++i)
+            {
+                float fi = float(i);
+                uv.y -= T * .5;
+                uv.x -= T * .4;
+                tmp = uv;
+
+                uv.x = tmp.x * r.x - tmp.y * r.y; 
+                uv.y = tmp.x * r.y + tmp.y * r.x; 
+                float m = cells(uv);
+                f = smin(f, m, .07);
+            }
+            return 1. - f;
+        }
+
+        vec3 g(vec2 uv)
+        {
+            vec2 off = vec2(0.0, .03);
+            float t = fbm(uv);
+            float x = t - fbm(uv + off.yx);
+            float y = t - fbm(uv + off);
+            float s = .0025;
+            vec3 xv = vec3(s, x, 0);
+            vec3 yv = vec3(0, y, s);
+            return normalize(cross(xv, -yv)).xzy;
+        }
+
+        vec3 ld = normalize(vec3(1.0, 2.0, 3.));
+
+        void main()
+        {
+            vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+            uv -= vec2(0.5);  
+            float a = u_resolution.y / u_resolution.x;
+            uv.x /= a;
+            vec2 ouv = uv;
+            float B = sin(u_time * BEAT);
+            uv = mix(uv, uv * sin(B), .035);
+            vec2 _uv = uv * 25.;
+            float f = fbm(_uv);
+
+            // base color
+            vec4 fragGrey = vec4(f);
+            vec4 fragColor = fragGrey;
+            
+            fragColor.rgb *= vec3(1., B * .05, (coef2*0.5) + B * .05);
+           
+           //fragColor.rgb /= vec3(0.1, .9 + B * .05, 0.8 + B * .05);//bubblegum pink
+
+            vec3 v = normalize(vec3(uv, 1.));
+            vec3 grad = g(_uv);
+
+     
+            
+            
+            //Fluid
+            
+            vec2 p=(2.0*gl_FragCoord.xy-u_resolution)/max(u_resolution.x,u_resolution.y);
+            
+            for(float i=1.;i<20.;i++)
+            {
+                p.x -= .4/i*sin(i*p.y+(u_time*0.9))+1.;
+                p.y -= .5/i*cos(i*p.x+(u_time*0.7))+2.;
+            } 
+          
+            p.x -= u_time;
+            
+            vec3 colMulti = vec3((abs(sin(0.8*p.x))*0.2)+0.3+coef4,((abs(sin(0.45*p.y)))*0.2),abs(sin(1.0*p.x+p.y))+0.3*coef1); 
+            
+            //rainbow
+            //vec3 colMulti = vec3((abs(sin(0.8*p.x))*0.2)+0.3+coef4,((abs(sin(0.45*p.y)))*0.2)+0.85,abs(sin(1.0*p.x+p.y))+0.9*coef1); 
+
+            float shade = pattern(vec2(f*2.0+p));//f;//pattern(p);
+
+            vec3 colW = vec3(0.5,0.1,0.0);
+            vec3 colG = vec3(0.6,0.0,0.7);
+
+            vec3 smCols = mix(col2,col1,smoothstep(0.6,0.7,shade));
+            vec3 col = mix(mix(col3,mix(colMulti,smCols,smoothstep(0.2,0.8,shade)),smoothstep(0.0,0.2,shade)),mix(colG,colW,shade),alpha);
+            
+            
+            
+            // spec
+            vec3 H = normalize(ld + v);
+            float S = max(0., dot(grad, H));
+            S = pow(S, 4.0) * .2;
+            fragColor.rgb += S * smCols;  //vec3(.4, .7, .7); // spec color...
+            
+            // rim
+            float R = 1.0 - clamp(dot(grad, v), .0, 1.);
+            fragColor.rgb = mix(fragColor.rgb, col, smoothstep(0.3, 1.5, R) ); // reflections...
+            
+            
+    
+            fragColor = mix(vec4(col,shade),fragColor,step(mix(0.47,0.6,alpha),fragGrey));
+            
+            // edges
+            //fragColor.rgb = mix(fragColor.rgb, vec3(0.), smoothstep(.45, .55, (max(abs(ouv.y * a), abs(ouv.x)))));
+            
+            
+            
+
+            // contrast
+            gl_FragColor = smoothstep(.0, 1., fragColor);
+        }
+    </script>
+
+</head>
+<body>
+    <div id="container" touch-action="none"></div>
+
+    <div class="button black" id="start-audio">
+        START
+    </div>
+       
+    <script src="js/experiencescript.js"></script>
+
+</body>
+</html>
