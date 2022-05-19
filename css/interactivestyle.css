@@ -30,11 +30,13 @@ body.live .description{
     font-size: 1vw;
     text-align: center;
     line-height: 4vw;
+    opacity: 0;
 }
 .button:hover{
     cursor:pointer;
     color:white;
     background-color: black; 
+    opacity: 1;
 }
 .button.black {
     border-color: #000;
